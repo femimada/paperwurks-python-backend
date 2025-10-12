@@ -17,7 +17,7 @@ services:
       ENVIRONMENT: development
       DEBUG: "True"
       SECRET_KEY: dev-secret-key-change-in-production
-      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_SETTINGS_MODULE: apps.config.settings.development
 
       # Database
       DB_NAME: ${DB_NAME:-paperwurks_dev}
@@ -71,7 +71,7 @@ services:
       ENVIRONMENT: development
       DEBUG: "True"
       SECRET_KEY: dev-secret-key-change-in-production
-      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_SETTINGS_MODULE: apps.config.settings.development
 
       # Database
       DB_NAME: ${DB_NAME:-paperwurks_dev}
@@ -115,7 +115,7 @@ services:
       ENVIRONMENT: development
       DEBUG: "True"
       SECRET_KEY: dev-secret-key-change-in-production
-      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_SETTINGS_MODULE: apps.config.settings.development
       DB_NAME: ${DB_NAME:-paperwurks_dev}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}

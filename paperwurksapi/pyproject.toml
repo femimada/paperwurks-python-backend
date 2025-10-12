@@ -1,3 +1,31 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperwurks-backend"
+version = "1.0.0"
+description = "Property due diligence and document management platform"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    {name = "Paperwurks Team"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Django :: 5.1",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Homepage = "https://paperwurks.com"
+Repository = "https://github.com/paperwurks/backend"
+
+# =============================================================================
+# Tooling Configuration
+# =============================================================================
+
 [tool.black]
 line-length = 100
 target-version = ['py312']
@@ -52,12 +80,45 @@ module = "*.tests.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings"
+# CORRECTED: Must point to the specific test settings module
+DJANGO_SETTINGS_MODULE = "apps.config.settings.test"
+
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 testpaths = ["apps", "tests"]
-addopts = "-v --tb=short --strict-markers"
+
+# Consolidated addopts from pytest.ini [cite: 4]
+addopts = "-v --tb=short --strict-markers --cov-report=term-missing --cov-report=html --cov-report=xml --reuse-db --nomigrations"
+
+# Additional options from pytest.ini [cite: 4]
+python_classes = "Test*"
+python_functions = "test_*"
+django_find_project = false
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::UserWarning",
+]
+
+# Markers from pytest.ini [cite: 4]
+markers = [
+    "slow: marks tests as slow (deselect with 'not slow')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "smoke: marks tests as smoke tests for quick validation",
+    "api: marks tests as API tests",
+    "celery: marks tests that require Celery",
+]
+
+# Environment variables from pytest.ini [cite: 4]
+env = [
+    "ENVIRONMENT=test",
+    "DEBUG=False",
+    "SECRET_KEY=test-secret-key",
+    "CELERY_TASK_ALWAYS_EAGER=True",
+]
 
 [tool.coverage.run]
+# Consolidated source from pyproject.toml [cite: 1] and coveragerc [cite: 2]
 source = ["apps", "config", "core", "tasks"]
 omit = [
     "*/migrations/*",
@@ -65,9 +126,17 @@ omit = [
     "*/__pycache__/*",
     "*/venv/*",
     "*/.venv/*",
+    "*/virtualenv/*",
+    "*/site-packages/*",
+    "manage.py",
+    "*/asgi.py",
+    "*/wsgi.py",
+    "*.pyc",
+    "*.pyo",
 ]
 
 [tool.coverage.report]
+# Consolidated exclude_lines from pyproject.toml [cite: 1] and coveragerc [cite: 2]
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
@@ -77,28 +146,51 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
     "@abstract",
+    "@abstractmethod",
+    "pass",
 ]
+precision = 2
+show_missing = true
+directory = "htmlcov"
 
-[build-system]
-requires = ["setuptools>=65.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "paperwurks-backend"
-version = "1.0.0"
-description = "Property due diligence and document management platform"
-readme = "README.md"
-requires-python = ">=3.12"
-authors = [
-    {name = "Paperwurks Team"}
+[tool.flake8]
+# Consolidated from setup.cfg and external flake8 file [cite: 5]
+max-line-length = 100
+max-complexity = 10
+exclude = [
+    ".git",
+    "__pycache__",
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/virtualenv/*",
+    "*/env/*",
+    ".tox",
+    "build",
+    "dist",
+    "*.egg-info",
 ]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Framework :: Django :: 5.1",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3.12",
+# Unified ignore list [cite: 5]
+ignore = [
+    "E203",  # whitespace before ':' (for black compatibility)
+    "E226",  # missing whitespace around arithmetic operator
+    "E266",  # too many leading '#' for block comment
+    "E302",  # expected 2 blank lines after class/function definition
+    "E41",   # continuation line over-indented
+    "E501",  # line too long (handled by max-line-length)
+    "E702",  # multiple statements on one line
+    "E731",  # do not assign a lambda expression, use a def
+    "W503",  # line break before binary operator
+    "F401",  # imported but unused (left here for manual check, though isort helps)
 ]
-
-[project.urls]
-Homepage = "https://paperwurks.com"
-Repository = "https://github.com/paperwurks/backend"
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "C",    # mccabe complexity
+    "B",    # bugbear
+]
+per-file-ignores = [
+    "__init__.py:F401",
+    "config/settings.py:E501",
+]

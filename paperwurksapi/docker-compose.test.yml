@@ -17,7 +17,7 @@ services:
       ENVIRONMENT: test
       DEBUG: "False"
       SECRET_KEY: test-secret-key
-      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_SETTINGS_MODULE: apps.config.settings.test
 
       # Test Database
       DB_NAME: paperwurks_test

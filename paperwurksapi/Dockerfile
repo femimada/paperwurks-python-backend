@@ -1,5 +1,5 @@
 # =============================================================================
-# Stage 1: Base - Python 3.12 with system dependencies
+# Stage 1: Base
 # =============================================================================
 FROM python:3.12-slim AS base
 
@@ -10,74 +10,79 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install system dependencies required for PostgreSQL and other packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
+RUN pip install --no-cache-dir pip-tools
+
 # =============================================================================
-# Stage 2: Dependencies - Install Python packages
+# Stage 2: Dependencies (Core packages from base.in)
 # =============================================================================
 FROM base AS dependencies
 
-# Copy requirements files
-COPY requirements.txt .
+COPY requirements/ requirements/
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /app/requirements
+
+RUN pip-compile base.in -o base.txt
+RUN pip install --no-cache-dir -r base.txt
+
+WORKDIR /app
 
 # =============================================================================
-# Stage 3: Development - Includes dev tools and hot-reload
+# Stage 3: Development
 # =============================================================================
 FROM dependencies AS development
 
-# Install development dependencies
-COPY requirements-dev.txt .
-RUN pip install --no-cache-dir -r requirements-dev.txt
+WORKDIR /app/requirements
+RUN pip-compile dev.in -o dev.txt
+RUN pip install --no-cache-dir -r dev.txt
 
-# Copy application code
+WORKDIR /app
+
 COPY . .
 
-# Create directory for static files
 RUN mkdir -p /app/staticfiles
 
-# Expose Django development server port
 EXPOSE 8000
 
-# Copy entrypoint script
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+ENV DJANGO_SETTINGS_MODULE=apps.config.settings.development \
+    ENVIRONMENT=development
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 
 # =============================================================================
-# Stage 4: Test - Optimized for CI/CD testing
+# Stage 4: Test
 # =============================================================================
 FROM development AS test
 
-# Set testing environment
-ENV DJANGO_SETTINGS_MODULE=config.settings \
+ENV DJANGO_SETTINGS_MODULE=apps.config.settings.test \
     ENVIRONMENT=test
 
-# Run tests by default
 CMD ["pytest", "--cov=apps", "--cov-report=xml", "--cov-report=term-missing"]
 
 # =============================================================================
-# Stage 5: Production Builder - Collect static files
+# Stage 5: Production Builder (Collect Static)
 # =============================================================================
 FROM dependencies AS builder
 
-# Copy application code
+WORKDIR /app/requirements
+RUN pip-compile prod.in -o prod.txt
+RUN pip install --no-cache-dir -r prod.txt
+
+WORKDIR /app
+
 COPY . .
 
-# Create necessary directories
 RUN mkdir -p /app/staticfiles /app/mediafiles
 
-# Collect static files (Django admin, etc.)
-ENV DJANGO_SETTINGS_MODULE=config.settings \
+ENV DJANGO_SETTINGS_MODULE=apps.config.settings.production \
     ENVIRONMENT=production \
     SECRET_KEY=build-time-secret \
     DEBUG=False
@@ -85,45 +90,40 @@ ENV DJANGO_SETTINGS_MODULE=config.settings \
 RUN python manage.py collectstatic --noinput
 
 # =============================================================================
-# Stage 6: Production - Minimal runtime image
+# Stage 6: Production
 # =============================================================================
 FROM base AS production
 
-# Install only runtime dependencies (no gcc, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python packages from dependencies stage
 COPY --from=dependencies /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=dependencies /usr/local/bin /usr/local/bin
 
-# Copy application code
-COPY . .
+RUN useradd -m -u 1000 appuser
 
-# Copy collected static files from builder
-COPY --from=builder /app/staticfiles /app/staticfiles
-
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+WORKDIR /app
+RUN chown -R appuser:appuser /app
 
 USER appuser
+COPY --chown=appuser:appuser . .
+COPY --from=builder --chown=appuser:appuser /app/staticfiles /app/staticfiles
 
-# Expose Gunicorn port
 EXPOSE 8000
 
-# Copy entrypoint script
 COPY --chown=appuser:appuser scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Health check
+ENV DJANGO_SETTINGS_MODULE=apps.config.settings.production \
+    ENVIRONMENT=production
+
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", \
+CMD ["gunicorn", "apps.config.wsgi:application", \
      "--bind", "0.0.0.0:8000", \
      "--workers", "2", \
      "--threads", "4", \
@@ -135,29 +135,17 @@ CMD ["gunicorn", "config.wsgi:application", \
      "--log-level", "info"]
 
 # =============================================================================
-# Stage 7: Worker - Celery worker for async tasks
+# Stage 7: Worker
 # =============================================================================
-FROM dependencies AS worker
-
-# Copy application code
-COPY . .
-
-# Create non-root user
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+FROM production AS worker
 
 USER appuser
 
-# Copy entrypoint script
-COPY --chown=appuser:appuser scripts/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Health check for Celery worker
 HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
-    CMD celery -A config inspect ping -d celery@$HOSTNAME || exit 1
+    CMD celery -A apps.config inspect ping -d celery@$HOSTNAME || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["celery", "-A", "config", "worker", \
+CMD ["celery", "-A", "apps.config", "worker", \
      "--loglevel=info", \
      "--concurrency=2", \
      "--max-tasks-per-child=1000"]

@@ -84,6 +84,9 @@ jobs:
           task-definition: task-def.json
           container-name: paperwurks-backend
           image: ${{ env.IMAGE }}
+          environment-variables: |
+            ENVIRONMENT=${{ needs.setup.outputs.environment }}
+            DJANGO_SETTINGS_MODULE=apps.config.settings.${{ needs.setup.outputs.environment }}
 
       - name: Deploy to Amazon ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
