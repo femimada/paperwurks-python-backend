@@ -1,0 +1,157 @@
+version: "3.9"
+
+# =============================================================================
+# Development Environment - Matches AWS Dev (1 backend, 1 worker)
+# =============================================================================
+
+services:
+  # Django Backend API - Development mode with hot-reload
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: paperwurks-backend-dev
+    environment:
+      # Django settings
+      ENVIRONMENT: development
+      DEBUG: "True"
+      SECRET_KEY: dev-secret-key-change-in-production
+      DJANGO_SETTINGS_MODULE: config.settings
+
+      # Database
+      DB_NAME: ${DB_NAME:-paperwurks_dev}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_HOST: postgres
+      DB_PORT: 5432
+
+      # Redis/Celery
+      REDIS_URL: redis://:devpassword@redis:6379/0
+      CELERY_BROKER_URL: redis://:devpassword@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:devpassword@redis:6379/0
+
+      # AWS (LocalStack)
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: eu-west-2
+      AWS_STORAGE_BUCKET_NAME: paperwurks-dev-documents
+
+      # Django Ninja
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - /app/.pytest_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    command: python manage.py runserver 0.0.0.0:8000
+    networks:
+      - paperwurks-network
+
+  # Celery Worker - Single worker for dev (0.25 vCPU equivalent)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: paperwurks-worker-dev
+    environment:
+      # Django settings
+      ENVIRONMENT: development
+      DEBUG: "True"
+      SECRET_KEY: dev-secret-key-change-in-production
+      DJANGO_SETTINGS_MODULE: config.settings
+
+      # Database
+      DB_NAME: ${DB_NAME:-paperwurks_dev}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_HOST: postgres
+      DB_PORT: 5432
+
+      # Redis/Celery
+      REDIS_URL: redis://:devpassword@redis:6379/0
+      CELERY_BROKER_URL: redis://:devpassword@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:devpassword@redis:6379/0
+
+      # AWS (LocalStack)
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: eu-west-2
+
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    command: celery -A config worker --loglevel=info --concurrency=1
+    networks:
+      - paperwurks-network
+
+  # Celery Beat - Periodic task scheduler
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: paperwurks-celery-beat-dev
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "True"
+      SECRET_KEY: dev-secret-key-change-in-production
+      DJANGO_SETTINGS_MODULE: config.settings
+      DB_NAME: ${DB_NAME:-paperwurks_dev}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_URL: redis://:devpassword@redis:6379/0
+      CELERY_BROKER_URL: redis://:devpassword@redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A config beat --loglevel=info
+    networks:
+      - paperwurks-network
+
+  # Flower - Celery monitoring tool
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: paperwurks-flower-dev
+    environment:
+      CELERY_BROKER_URL: redis://:devpassword@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:devpassword@redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    command: celery -A config flower --port=5555
+    networks:
+      - paperwurks-network
+
+networks:
+  paperwurks-network:
+    external: true

@@ -1,0 +1,85 @@
+version: "3.9"
+
+# =============================================================================
+# Base Services - Shared across all environments
+# =============================================================================
+
+services:
+  # PostgreSQL 15.8 - Matches AWS RDS version
+  postgres:
+    image: postgres:15.8-alpine
+    container_name: paperwurks-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-paperwurks_dev}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-scram-sha-256}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-paperwurks_dev}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - paperwurks-network
+
+  # Redis - For Celery broker and caching
+  redis:
+    image: redis:7-alpine
+    container_name: paperwurks-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-devpassword}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - paperwurks-network
+
+  # LocalStack - For local AWS services (S3, Secrets Manager, SQS)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: paperwurks-localstack
+    environment:
+      SERVICES: s3,secretsmanager,sqs
+      DEBUG: ${LOCALSTACK_DEBUG:-0}
+      DATA_DIR: /tmp/localstack/data
+      DOCKER_HOST: unix:///var/run/docker.sock
+    ports:
+      - "4566:4566" # LocalStack edge port
+    volumes:
+      - localstack_data:/tmp/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - paperwurks-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  paperwurks-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  localstack_data:
+    driver: local
