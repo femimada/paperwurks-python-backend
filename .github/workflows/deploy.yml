@@ -1,0 +1,112 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - dev
+      - release
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        description: Environment to deploy
+        options:
+          - dev
+          - staging
+          - production
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  setup:
+    name: Determine Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+
+    steps:
+      - name: Set Environment from Branch
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/release" ]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+          fi
+
+  deploy:
+    name: Deploy to ${{ needs.setup.outputs.environment }}
+    needs: setup
+    runs-on: ubuntu-latest
+    environment: ${{ needs.setup.outputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/paperwurks-deploy-role
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ needs.setup.outputs.environment }}-${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG
+          echo "IMAGE=$ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ vars.ECS_SERVICE_BACKEND }} \
+            --query taskDefinition > task-def.json
+
+      - name: Update task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: paperwurks-backend
+          image: ${{ env.IMAGE }}
+          environment-variables: |
+            ENVIRONMENT=${{ needs.setup.outputs.environment }}
+            DJANGO_SETTINGS_MODULE=apps.config.settings.${{ needs.setup.outputs.environment }}
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ vars.ECS_SERVICE_BACKEND }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Deployment Summary
+        run: |
+          echo " Deployment Complete!"
+          echo "Environment: ${{ needs.setup.outputs.environment }}"
+          echo "Image: ${{ env.IMAGE }}"
+          echo "Cluster: ${{ vars.ECS_CLUSTER }}"
+          echo "Service: ${{ vars.ECS_SERVICE_BACKEND }}"
+
+      - name: Notify on Failure
+        if: failure() && needs.setup.outputs.environment == 'production'
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{"text":" Production deployment failed for commit ${{ github.sha }}"}'

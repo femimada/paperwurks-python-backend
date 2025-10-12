@@ -1,0 +1,9 @@
+
+-r base.in
+
+# AWS Integration (used for static/media storage in cloud)
+boto3>=1.35
+django-storages>=1.14
+
+# Monitoring & APM
+newrelic>=10.0

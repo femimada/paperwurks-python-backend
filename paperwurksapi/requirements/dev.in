@@ -1,0 +1,26 @@
+
+-r base.in
+
+# Debugging and Interactive Shell
+ipython>=8.0
+ipdb>=0.13
+django-debug-toolbar 
+django-extensions 
+
+# Testing Frameworks
+pytest>=8.0
+pytest-django>=4.9
+coverage>=7.6
+factory-boy>=3.3
+mock>=5.0
+
+# Code Quality and Formatting
+flake8>=7.0
+black 
+isort
+
+# Documentation
+mkdocs>=1.6
+
+# Build Tools
+pip-tools>=7.0

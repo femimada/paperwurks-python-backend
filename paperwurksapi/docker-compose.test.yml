@@ -1,0 +1,155 @@
+version: "3.9"
+
+# =============================================================================
+# Test Environment - For CI/CD pipelines and local testing
+# =============================================================================
+
+services:
+  # Test Runner - Runs pytest with coverage
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: paperwurks-test
+    environment:
+      # Django settings
+      ENVIRONMENT: test
+      DEBUG: "False"
+      SECRET_KEY: test-secret-key
+      DJANGO_SETTINGS_MODULE: apps.config.settings.test
+
+      # Test Database
+      DB_NAME: paperwurks_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: postgres-test
+      DB_PORT: 5432
+
+      # Redis/Celery
+      REDIS_URL: redis://:testpassword@redis-test:6379/0
+      CELERY_BROKER_URL: redis://:testpassword@redis-test:6379/0
+      CELERY_RESULT_BACKEND: redis://:testpassword@redis-test:6379/0
+      CELERY_TASK_ALWAYS_EAGER: "True" # Run tasks synchronously in tests
+
+      # AWS (Mock)
+      AWS_ENDPOINT_URL: http://localstack-test:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: eu-west-2
+      AWS_STORAGE_BUCKET_NAME: paperwurks-test-documents
+
+      # Coverage settings
+      COVERAGE_FILE: /app/.coverage
+
+    volumes:
+      - .:/app
+      - test_coverage:/app/htmlcov
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    command: >
+      sh -c "
+        python manage.py migrate --noinput &&
+        pytest -v 
+          --cov=apps 
+          --cov-report=xml:/app/coverage.xml 
+          --cov-report=html:/app/htmlcov 
+          --cov-report=term-missing 
+          --junitxml=/app/junit.xml
+          --tb=short
+      "
+    networks:
+      - test-network
+
+  # PostgreSQL for testing
+  postgres-test:
+    image: postgres:15.8-alpine
+    container_name: paperwurks-postgres-test
+    environment:
+      POSTGRES_DB: paperwurks_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    tmpfs:
+      - /var/lib/postgresql/data # In-memory for faster tests
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d paperwurks_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - test-network
+
+  # Redis for testing
+  redis-test:
+    image: redis:7-alpine
+    container_name: paperwurks-redis-test
+    command: redis-server --requirepass testpassword
+    tmpfs:
+      - /data # In-memory for faster tests
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - test-network
+
+  # LocalStack for testing AWS services
+  localstack-test:
+    image: localstack/localstack:latest
+    container_name: paperwurks-localstack-test
+    environment:
+      SERVICES: s3,secretsmanager,sqs
+      DEBUG: 0
+    tmpfs:
+      - /tmp/localstack
+    networks:
+      - test-network
+
+  # Linting and Code Quality
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: paperwurks-lint
+    volumes:
+      - .:/app
+    command: >
+      sh -c "
+        echo '=== Running Flake8 ===' &&
+        flake8 apps config tasks --count --statistics &&
+        echo '=== Running Black Check ===' &&
+        black --check apps config tasks &&
+        echo '=== Running isort Check ===' &&
+        isort --check-only apps config tasks &&
+        echo '=== All linting passed! ==='
+      "
+    networks:
+      - test-network
+
+  # Type Checking with mypy
+  typecheck:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: paperwurks-typecheck
+    volumes:
+      - .:/app
+    command: mypy apps config tasks --ignore-missing-imports
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  test_coverage:
+    driver: local

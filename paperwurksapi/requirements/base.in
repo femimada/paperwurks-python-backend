@@ -1,0 +1,29 @@
+# Django Core
+Django>=5.1,<5.2
+django-configurations>=2.5
+dj-database-url>=2.0
+
+# API Framework
+django-ninja>=1.4
+
+# Database Driver
+psycopg2-binary>=2.9
+
+# Task Queue Core
+celery>=5.3
+redis>=5.0
+
+# Authentication & Security
+PyJWT>=2.8
+cryptography>=41.0
+django-cors-headers>=4.3
+
+# Utilities
+python-decouple>=3.8
+django-filter>=24.0
+django-model-utils>=5.0
+django-unique-upload>=0.2
+requests>=2.31
+
+# HTTP & WSGI Server (required for production/worker base image)
+gunicorn>=23.0
