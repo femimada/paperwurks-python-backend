@@ -42,7 +42,6 @@ jobs:
     name: Build and Push Images
     needs: setup
     runs-on: ubuntu-latest
-    environment: ${{ needs.setup.outputs.environment }}
     outputs:
       backend-image: ${{ steps.images.outputs.backend }}
       worker-image: ${{ steps.images.outputs.worker }}
