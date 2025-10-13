@@ -1,8 +1,5 @@
 from .common import *
 
-# =============================================================================
-# PRODUCTION OVERRIDES
-# =============================================================================
 
 DEBUG = False
 SECRET_KEY = config("SECRET_KEY") 
@@ -13,8 +10,8 @@ DATABASES = {
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": config("REDIS_URL", default="redis://redis:6379/1"),
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": config("REDIS_URL"),  # rediss:// URL with TLS from infrastructure
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
@@ -23,9 +20,6 @@ CACHES = {
     }
 }
 
-# =============================================================================
-# Security Enforcement
-# =============================================================================
 
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
 SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=True, cast=bool)
@@ -38,31 +32,19 @@ SECURE_HSTS_PRELOAD = True
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", cast=Csv()) 
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", cast=Csv(), default="")
 
-# =============================================================================
-# AWS/S3 Storage Configuration (FULLY CONSOLIDATED)
-# =============================================================================
 
 AWS_REGION = config("AWS_REGION", default="eu-west-2")
-AWS_STORAGE_BUCKET_NAME = config(
-    "AWS_STORAGE_BUCKET_NAME", 
-    default=f"paperwurks-{ENVIRONMENT}-documents"
-)
+AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
 
-AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID", default=None)
-AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY", default=None)
 AWS_DEFAULT_ACL = 'public-read' 
 AWS_AUTO_CREATE_BUCKET = True 
 
-# Set default file storage to S3
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
-# Set MEDIA_URL to S3 location for file serving
-MEDIA_URL = f'https://s3.{AWS_REGION}.amazonaws.com/{AWS_STORAGE_BUCKET_NAME}/'
+# S3 URL for media files
+MEDIA_URL = f'https://{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/'
 
-# =============================================================================
-# Email Configuration
-# =============================================================================
 
 EMAIL_HOST = config("EMAIL_HOST", default="")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
