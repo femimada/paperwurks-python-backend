@@ -1,2 +1,1 @@
-from .local import Local  # noqa
-from .production import Production  # noqa
+default_app_config = 'apps.config.apps.ConfigConfig'

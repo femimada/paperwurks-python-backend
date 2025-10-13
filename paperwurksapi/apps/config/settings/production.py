@@ -7,6 +7,10 @@ DATABASES = {
     "default": dj_database_url.config(conn_max_age=600)
 }
 
+third_party_apps = [
+    "storages",
+]
+INSTALLED_APPS += third_party_apps
 
 CACHES = {
     "default": {
