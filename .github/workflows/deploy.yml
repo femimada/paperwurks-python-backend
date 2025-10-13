@@ -76,8 +76,8 @@ jobs:
       - name: Build and Push Backend Image
         uses: docker/build-push-action@v5
         with:
-          context: ./paperwurksapi # CORRECTED: Changed context to the app directory
-          file: ./Dockerfile
+          context: ./paperwurksapi
+          file: ./paperwurksapi/Dockerfile
           target: production
           push: true
           tags: ${{ steps.images.outputs.backend }}
@@ -87,8 +87,8 @@ jobs:
       - name: Build and Push Worker Image
         uses: docker/build-push-action@v5
         with:
-          context: ./paperwurksapi # CORRECTED: Changed context to the app directory
-          file: ./Dockerfile
+          context: ./paperwurksapi
+          file: ./paperwurksapi/Dockerfile
           target: worker
           push: true
           tags: ${{ steps.images.outputs.worker }}
