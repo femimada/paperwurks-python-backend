@@ -15,7 +15,7 @@ INSTALLED_APPS += third_party_apps
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": config("REDIS_URL"),  # rediss:// URL with TLS from infrastructure
+        "LOCATION": config("REDIS_URL"), 
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },

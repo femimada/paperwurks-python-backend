@@ -44,8 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ needs.setup.outputs.environment }}
     outputs:
-      backend-image: ${{ steps.images.outputs.backend }}
-      worker-image: ${{ steps.images.outputs.worker }}
+      backend-image: ${{ steps.output-capture.outputs.backend-image }}
+      worker-image: ${{ steps.output-capture.outputs.worker-image }}
 
     steps:
       - name: Checkout
@@ -95,6 +95,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Capture Build Outputs
+        id: output-capture
+        run: |
+          echo "backend-image=${{ steps.images.outputs.backend }}" >> $GITHUB_OUTPUT
+          echo "worker-image=${{ steps.images.outputs.worker }}" >> $GITHUB_OUTPUT
+          echo "Built images:"
+          echo "  Backend: ${{ steps.images.outputs.backend }}"
+          echo "  Worker: ${{ steps.images.outputs.worker }}"
+
   deploy-backend:
     name: Deploy Backend Service
     needs: [setup, build]
@@ -108,58 +117,32 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/paperwurks-deploy-role
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Debug Build Outputs
+        run: |
+          echo "Backend Image: ${{ needs.build.outputs.backend-image }}"
+          echo "Environment: ${{ needs.setup.outputs.environment }}"
+
       - name: Download Current Task Definition
         run: |
           aws ecs describe-task-definition \
             --task-definition ${{ vars.ECS_TASK_DEFINITION_BACKEND }} \
-            --query taskDefinition > task-def.json
+            --query taskDefinition > task-definition.json
 
-          # Remove fields that can't be used in registration
-          cat task-def.json | jq 'del(
-            .taskDefinitionArn,
-            .revision,
-            .status,
-            .requiresAttributes,
-            .compatibilities,
-            .registeredAt,
-            .registeredBy
-          )' > task-def-clean.json
-
-      - name: Update Task Definition with New Image
-        id: task-def
-        run: |
-          # Update the image in the task definition
-          cat task-def-clean.json | jq \
-            --arg IMAGE "${{ needs.build.outputs.backend-image }}" \
-            '.containerDefinitions[0].image = $IMAGE' \
-            > task-def-updated.json
-
-          # Register the new task definition
-          NEW_TASK_DEF=$(aws ecs register-task-definition \
-            --cli-input-json file://task-def-updated.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          echo "new-task-def=$NEW_TASK_DEF" >> $GITHUB_OUTPUT
-          echo "Registered new task definition: $NEW_TASK_DEF"
+      - name: Render New Task Definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: paperwurks-backend
+          image: ${{ needs.build.outputs.backend-image }}
 
       - name: Deploy to ECS
-        run: |
-          echo "Deploying backend to ${{ vars.ECS_CLUSTER }}/${{ vars.ECS_SERVICE_BACKEND }}"
-
-          aws ecs update-service \
-            --cluster ${{ vars.ECS_CLUSTER }} \
-            --service ${{ vars.ECS_SERVICE_BACKEND }} \
-            --task-definition ${{ steps.task-def.outputs.new-task-def }} \
-            --force-new-deployment
-
-      - name: Wait for Service Stability
-        run: |
-          echo "Waiting for service to reach steady state..."
-          aws ecs wait services-stable \
-            --cluster ${{ vars.ECS_CLUSTER }} \
-            --services ${{ vars.ECS_SERVICE_BACKEND }}
-          echo "Backend deployment complete"
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ vars.ECS_SERVICE_BACKEND }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
 
   deploy-worker:
     name: Deploy Worker Service
@@ -174,58 +157,32 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/paperwurks-deploy-role
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Debug Build Outputs
+        run: |
+          echo "Worker Image: ${{ needs.build.outputs.worker-image }}"
+          echo "Environment: ${{ needs.setup.outputs.environment }}"
+
       - name: Download Current Task Definition
         run: |
           aws ecs describe-task-definition \
             --task-definition ${{ vars.ECS_TASK_DEFINITION_WORKER }} \
-            --query taskDefinition > task-def.json
+            --query taskDefinition > task-definition.json
 
-          # Remove fields that can't be used in registration
-          cat task-def.json | jq 'del(
-            .taskDefinitionArn,
-            .revision,
-            .status,
-            .requiresAttributes,
-            .compatibilities,
-            .registeredAt,
-            .registeredBy
-          )' > task-def-clean.json
-
-      - name: Update Task Definition with New Image
-        id: task-def
-        run: |
-          # Update the image in the task definition
-          cat task-def-clean.json | jq \
-            --arg IMAGE "${{ needs.build.outputs.worker-image }}" \
-            '.containerDefinitions[0].image = $IMAGE' \
-            > task-def-updated.json
-
-          # Register the new task definition
-          NEW_TASK_DEF=$(aws ecs register-task-definition \
-            --cli-input-json file://task-def-updated.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          echo "new-task-def=$NEW_TASK_DEF" >> $GITHUB_OUTPUT
-          echo "Registered new task definition: $NEW_TASK_DEF"
+      - name: Render New Task Definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: paperwurks-worker
+          image: ${{ needs.build.outputs.worker-image }}
 
       - name: Deploy to ECS
-        run: |
-          echo "Deploying worker to ${{ vars.ECS_CLUSTER }}/${{ vars.ECS_SERVICE_WORKER }}"
-
-          aws ecs update-service \
-            --cluster ${{ vars.ECS_CLUSTER }} \
-            --service ${{ vars.ECS_SERVICE_WORKER }} \
-            --task-definition ${{ steps.task-def.outputs.new-task-def }} \
-            --force-new-deployment
-
-      - name: Wait for Service Stability
-        run: |
-          echo "Waiting for service to reach steady state..."
-          aws ecs wait services-stable \
-            --cluster ${{ vars.ECS_CLUSTER }} \
-            --services ${{ vars.ECS_SERVICE_WORKER }}
-          echo "Worker deployment complete"
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ vars.ECS_SERVICE_WORKER }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
 
   deployment-summary:
     name: Deployment Summary
