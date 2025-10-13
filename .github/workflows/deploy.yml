@@ -76,7 +76,7 @@ jobs:
       - name: Build and Push Backend Image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./paperwurksapi # CORRECTED: Changed context to the app directory
           file: ./Dockerfile
           target: production
           push: true
@@ -87,7 +87,7 @@ jobs:
       - name: Build and Push Worker Image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./paperwurksapi # CORRECTED: Changed context to the app directory
           file: ./Dockerfile
           target: worker
           push: true
@@ -236,7 +236,7 @@ jobs:
     steps:
       - name: Summary
         run: |
-          echo "# 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "# Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
