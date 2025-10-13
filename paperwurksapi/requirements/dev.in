@@ -24,3 +24,6 @@ mkdocs>=1.6
 
 # Build Tools
 pip-tools>=7.0
+
+# Monitoring
+flower

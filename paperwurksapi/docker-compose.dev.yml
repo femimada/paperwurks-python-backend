@@ -1,5 +1,3 @@
-version: "3.9"
-
 # =============================================================================
 # Development Environment - Matches AWS Dev (1 backend, 1 worker)
 # =============================================================================
@@ -20,11 +18,7 @@ services:
       DJANGO_SETTINGS_MODULE: apps.config.settings.development
 
       # Database
-      DB_NAME: ${DB_NAME:-paperwurks_dev}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_HOST: postgres
-      DB_PORT: 5432
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-paperwurks_dev}
 
       # Redis/Celery
       REDIS_URL: redis://:devpassword@redis:6379/0
@@ -72,13 +66,7 @@ services:
       DEBUG: "True"
       SECRET_KEY: dev-secret-key-change-in-production
       DJANGO_SETTINGS_MODULE: apps.config.settings.development
-
-      # Database
-      DB_NAME: ${DB_NAME:-paperwurks_dev}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_HOST: postgres
-      DB_PORT: 5432
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-paperwurks_dev}
 
       # Redis/Celery
       REDIS_URL: redis://:devpassword@redis:6379/0
@@ -100,7 +88,7 @@ services:
         condition: service_healthy
       localstack:
         condition: service_started
-    command: celery -A config worker --loglevel=info --concurrency=1
+    command: celery -A apps.config worker --loglevel=info --concurrency=1
     networks:
       - paperwurks-network
 
@@ -116,11 +104,7 @@ services:
       DEBUG: "True"
       SECRET_KEY: dev-secret-key-change-in-production
       DJANGO_SETTINGS_MODULE: apps.config.settings.development
-      DB_NAME: ${DB_NAME:-paperwurks_dev}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_HOST: postgres
-      DB_PORT: 5432
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-paperwurks_dev}
       REDIS_URL: redis://:devpassword@redis:6379/0
       CELERY_BROKER_URL: redis://:devpassword@redis:6379/0
     volumes:
@@ -130,7 +114,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A config beat --loglevel=info
+    command: celery -A apps.config beat --loglevel=info
     networks:
       - paperwurks-network
 
@@ -144,14 +128,12 @@ services:
     environment:
       CELERY_BROKER_URL: redis://:devpassword@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:devpassword@redis:6379/0
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-paperwurks_dev}
     ports:
       - "5555:5555"
     depends_on:
       - redis
-    command: celery -A config flower --port=5555
+      - worker
+    command: celery -A apps.config flower --port=5555
     networks:
       - paperwurks-network
-
-networks:
-  paperwurks-network:
-    external: true

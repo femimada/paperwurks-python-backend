@@ -26,10 +26,9 @@ INSTALLED_APPS = [
     # Third-party 
     "corsheaders",
     "django_filters",
-    "django_ninja",
-    "storages",
+    "ninja",
     # Local apps
-    "apps.users",
+    #"apps.users",
     "apps.config",
 ]
 
@@ -79,7 +78,7 @@ DATABASES = {
 # Auth, Password Validation, and User Model
 # =============================================================================
 
-AUTH_USER_MODEL = "users.User"
+#AUTH_USER_MODEL = "apps.users.User"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -146,56 +145,56 @@ CACHES = {
 # Logging Configuration
 # =============================================================================
 
-LOG_LEVEL = config("LOG_LEVEL", default="INFO")
+# LOG_LEVEL = config("LOG_LEVEL", default="INFO")
 
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "verbose": {
-            "format": "[{levelname}] {asctime} {name} {message}",
-            "style": "{",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
-        },
-        "simple": {
-            "format": "[{levelname}] {message}",
-            "style": "{",
-        },
-    },
-    "handlers": {
-        "console": {
-            "level": LOG_LEVEL,
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        },
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": LOG_LEVEL,
-    },
-    "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": LOG_LEVEL,
-            "propagate": False,
-        },
-        "django.db.backends": {
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
-        },
-        "celery": {
-            "handlers": ["console"],
-            "level": LOG_LEVEL,
-            "propagate": False,
-        },
-        "apps": {
-            "handlers": ["console"],
-            "level": LOG_LEVEL,
-            "propagate": False,
-        },
-    },
-}
+# LOGGING = {
+#     "version": 1,
+#     "disable_existing_loggers": False,
+#     "formatters": {
+#         "verbose": {
+#             "format": "[{levelname}] {asctime} {name} {message}",
+#             "style": "{",
+#             "datefmt": "%Y-%m-%d %H:%M:%S",
+#         },
+#         "simple": {
+#             "format": "[{levelname}] {message}",
+#             "style": "{",
+#         },
+#     },
+#     "handlers": {
+#         "console": {
+#             "level": LOG_LEVEL,
+#             "class": "logging.StreamHandler",
+#             "formatter": "verbose",
+#         },
+#     },
+#     "root": {
+#         "handlers": ["console"],
+#         "level": LOG_LEVEL,
+#     },
+#     "loggers": {
+#         "django": {
+#             "handlers": ["console"],
+#             "level": LOG_LEVEL,
+#             "propagate": False,
+#         },
+#         "django.db.backends": {
+#             "handlers": ["console"],
+#             "level": "INFO",
+#             "propagate": False,
+#         },
+#         "celery": {
+#             "handlers": ["console"],
+#             "level": LOG_LEVEL,
+#             "propagate": False,
+#         },
+#         "apps": {
+#             "handlers": ["console"],
+#             "level": LOG_LEVEL,
+#             "propagate": False,
+#         },
+#     },
+# }
 
 
 (BASE_DIR / "logs").mkdir(exist_ok=True)

@@ -1,5 +1,3 @@
-version: "3.9"
-
 # =============================================================================
 # Test Environment - For CI/CD pipelines and local testing
 # =============================================================================
@@ -20,11 +18,7 @@ services:
       DJANGO_SETTINGS_MODULE: apps.config.settings.test
 
       # Test Database
-      DB_NAME: paperwurks_test
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_HOST: postgres-test
-      DB_PORT: 5432
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-paperwurks_test}
 
       # Redis/Celery
       REDIS_URL: redis://:testpassword@redis-test:6379/0
@@ -145,10 +139,6 @@ services:
     command: mypy apps config tasks --ignore-missing-imports
     networks:
       - test-network
-
-networks:
-  test-network:
-    driver: bridge
 
 volumes:
   test_coverage:
