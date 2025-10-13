@@ -78,7 +78,7 @@ jobs:
         with:
           context: ./paperwurksapi
           file: ./paperwurksapi/Dockerfile
-          target: production
+          target: ${{ needs.setup.outputs.environment == 'dev' && 'development' || 'production' }}
           push: true
           tags: ${{ steps.images.outputs.backend }}
           cache-from: type=gha
