@@ -23,7 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
-
     steps:
       - name: Set Environment from Branch
         id: set-env
@@ -38,15 +37,39 @@ jobs:
             echo "environment=prod" >> $GITHUB_OUTPUT
           fi
 
-  build:
-    name: Build and Push Images
+  tag:
+    name: Generate Image Tag
     needs: setup
     runs-on: ubuntu-latest
-    environment: ${{ needs.setup.outputs.environment }}
     outputs:
-      backend-image: ${{ steps.images.outputs.backend }}
-      worker-image: ${{ steps.images.outputs.worker }}
+      image_tag: ${{ steps.tagger.outputs.image_tag }}
+      aws_region: ${{ vars.AWS_REGION }}
+    steps:
+      - name: Set Image Tag
+        id: tagger
+        run: |
+          TAG="${{ needs.setup.outputs.environment }}-${{ github.sha }}"
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated Tag: $TAG"
 
+  build:
+    name: Build and Push ${{ matrix.service.name }} Image
+    needs: [setup, tag]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.setup.outputs.environment }}
+    strategy:
+      matrix:
+        service:
+          - name: backend
+            context: ./paperwurksapi
+            file: ./paperwurksapi/Dockerfile
+            target: ${{ needs.setup.outputs.environment == 'dev' && 'development' || 'production' }}
+            image_name: paperwurks-backend
+          - name: worker
+            context: ./paperwurksapi
+            file: ./paperwurksapi/Dockerfile
+            target: worker
+            image_name: paperwurks-worker
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,43 +87,39 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set Image Tags
-        id: images
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ needs.setup.outputs.environment }}-${{ github.sha }}
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.file }}
+          target: ${{ matrix.service.target }}
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ matrix.service.image_name }}:${{ needs.tag.outputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Capture Build Output
         run: |
-          echo "backend=$ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG" >> $GITHUB_OUTPUT
-          echo "worker=$ECR_REGISTRY/paperwurks-worker:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "Built image: ${{ steps.login-ecr.outputs.registry }}/${{ matrix.service.image_name }}:${{ needs.tag.outputs.image_tag }}"
 
-      - name: Build and Push Backend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./paperwurksapi
-          file: ./paperwurksapi/Dockerfile
-          target: ${{ needs.setup.outputs.environment == 'dev' && 'development' || 'production' }}
-          push: true
-          tags: ${{ steps.images.outputs.backend }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and Push Worker Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./paperwurksapi
-          file: ./paperwurksapi/Dockerfile
-          target: worker
-          push: true
-          tags: ${{ steps.images.outputs.worker }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy-backend:
-    name: Deploy Backend Service
-    needs: [setup, build]
+  deploy:
+    name: Deploy ${{ matrix.service.name }} Service
+    needs: [setup, tag, build]
     runs-on: ubuntu-latest
     environment: ${{ needs.setup.outputs.environment }}
-
+    strategy:
+      matrix:
+        service:
+          - name: backend
+            env_task_key: ECS_TASK_DEFINITION_BACKEND
+            env_service_key: ECS_SERVICE_BACKEND
+            container_name: paperwurks-backend
+            image_name: paperwurks-backend
+          - name: worker
+            env_task_key: ECS_TASK_DEFINITION_WORKER
+            env_service_key: ECS_SERVICE_WORKER
+            container_name: paperwurks-worker
+            image_name: paperwurks-worker
     steps:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -108,132 +127,59 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/paperwurks-deploy-role
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      - name: Resolve ECS Variables
+        id: resolve
+        run: |
+          TASK_DEF="${{ vars[matrix.service.env_task_key] }}"
+          ECS_SERVICE="${{ vars[matrix.service.env_service_key] }}"
+          echo "task_definition=$TASK_DEF" >> $GITHUB_OUTPUT
+          echo "ecs_service=$ECS_SERVICE" >> $GITHUB_OUTPUT
+          echo "Resolved ECS task definition: $TASK_DEF"
+          echo "Resolved ECS service: $ECS_SERVICE"
+
       - name: Download Current Task Definition
         run: |
           aws ecs describe-task-definition \
-            --task-definition ${{ vars.ECS_TASK_DEFINITION_BACKEND }} \
-            --query taskDefinition > task-def.json
+            --task-definition ${{ steps.resolve.outputs.task_definition }} \
+            --region ${{ vars.AWS_REGION }} \
+            --query taskDefinition > task-definition.json
 
-          # Remove fields that can't be used in registration
-          cat task-def.json | jq 'del(
-            .taskDefinitionArn,
-            .revision,
-            .status,
-            .requiresAttributes,
-            .compatibilities,
-            .registeredAt,
-            .registeredBy
-          )' > task-def-clean.json
-
-      - name: Update Task Definition with New Image
-        id: task-def
-        run: |
-          # Update the image in the task definition
-          cat task-def-clean.json | jq \
-            --arg IMAGE "${{ needs.build.outputs.backend-image }}" \
-            '.containerDefinitions[0].image = $IMAGE' \
-            > task-def-updated.json
-
-          # Register the new task definition
-          NEW_TASK_DEF=$(aws ecs register-task-definition \
-            --cli-input-json file://task-def-updated.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          echo "new-task-def=$NEW_TASK_DEF" >> $GITHUB_OUTPUT
-          echo "Registered new task definition: $NEW_TASK_DEF"
-
-      - name: Deploy to ECS
-        run: |
-          echo "Deploying backend to ${{ vars.ECS_CLUSTER }}/${{ vars.ECS_SERVICE_BACKEND }}"
-
-          aws ecs update-service \
-            --cluster ${{ vars.ECS_CLUSTER }} \
-            --service ${{ vars.ECS_SERVICE_BACKEND }} \
-            --task-definition ${{ steps.task-def.outputs.new-task-def }} \
-            --force-new-deployment
-
-      - name: Wait for Service Stability
-        run: |
-          echo "Waiting for service to reach steady state..."
-          aws ecs wait services-stable \
-            --cluster ${{ vars.ECS_CLUSTER }} \
-            --services ${{ vars.ECS_SERVICE_BACKEND }}
-          echo "Backend deployment complete"
-
-  deploy-worker:
-    name: Deploy Worker Service
-    needs: [setup, build]
-    runs-on: ubuntu-latest
-    environment: ${{ needs.setup.outputs.environment }}
-
-    steps:
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Render New Task Definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/paperwurks-deploy-role
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Download Current Task Definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ vars.ECS_TASK_DEFINITION_WORKER }} \
-            --query taskDefinition > task-def.json
-
-          # Remove fields that can't be used in registration
-          cat task-def.json | jq 'del(
-            .taskDefinitionArn,
-            .revision,
-            .status,
-            .requiresAttributes,
-            .compatibilities,
-            .registeredAt,
-            .registeredBy
-          )' > task-def-clean.json
-
-      - name: Update Task Definition with New Image
-        id: task-def
-        run: |
-          # Update the image in the task definition
-          cat task-def-clean.json | jq \
-            --arg IMAGE "${{ needs.build.outputs.worker-image }}" \
-            '.containerDefinitions[0].image = $IMAGE' \
-            > task-def-updated.json
-
-          # Register the new task definition
-          NEW_TASK_DEF=$(aws ecs register-task-definition \
-            --cli-input-json file://task-def-updated.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          echo "new-task-def=$NEW_TASK_DEF" >> $GITHUB_OUTPUT
-          echo "Registered new task definition: $NEW_TASK_DEF"
+          task-definition: task-definition.json
+          container-name: ${{ matrix.service.container_name }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ matrix.service.image_name }}:${{ needs.tag.outputs.image_tag }}
 
       - name: Deploy to ECS
-        run: |
-          echo "Deploying worker to ${{ vars.ECS_CLUSTER }}/${{ vars.ECS_SERVICE_WORKER }}"
-
-          aws ecs update-service \
-            --cluster ${{ vars.ECS_CLUSTER }} \
-            --service ${{ vars.ECS_SERVICE_WORKER }} \
-            --task-definition ${{ steps.task-def.outputs.new-task-def }} \
-            --force-new-deployment
-
-      - name: Wait for Service Stability
-        run: |
-          echo "Waiting for service to reach steady state..."
-          aws ecs wait services-stable \
-            --cluster ${{ vars.ECS_CLUSTER }} \
-            --services ${{ vars.ECS_SERVICE_WORKER }}
-          echo "Worker deployment complete"
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ steps.resolve.outputs.ecs_service }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
 
   deployment-summary:
     name: Deployment Summary
-    needs: [setup, build, deploy-backend, deploy-worker]
+    needs: [setup, tag, deploy]
     runs-on: ubuntu-latest
     if: always()
-
     steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/paperwurks-deploy-role
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Summary
         run: |
           echo "# Deployment Summary" >> $GITHUB_STEP_SUMMARY
@@ -243,8 +189,8 @@ jobs:
           echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Images" >> $GITHUB_STEP_SUMMARY
-          echo "- **Backend:** \`${{ needs.build.outputs.backend-image }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Worker:** \`${{ needs.build.outputs.worker-image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend:** \`${{ steps.login-ecr.outputs.registry }}/paperwurks-backend:${{ needs.tag.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Worker:** \`${{ steps.login-ecr.outputs.registry }}/paperwurks-worker:${{ needs.tag.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Services" >> $GITHUB_STEP_SUMMARY
           echo "- **Cluster:** ${{ vars.ECS_CLUSTER }}" >> $GITHUB_STEP_SUMMARY
@@ -252,8 +198,8 @@ jobs:
           echo "- **Worker Service:** ${{ vars.ECS_SERVICE_WORKER }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Notify on Failure
-        if: failure() && needs.setup.outputs.environment == 'production'
+        if: failure() && needs.setup.outputs.environment == 'prod'
         run: |
           curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
             -H 'Content-Type: application/json' \
-            -d "{\"text\":\" Production deployment failed for commit ${{ github.sha }}\"}"
+            -d "{\"text\":\"Production deployment failed for commit ${{ github.sha }}\"}"

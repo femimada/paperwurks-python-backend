@@ -82,7 +82,7 @@ COPY . .
 
 RUN mkdir -p /app/staticfiles /app/mediafiles
 
-ENV DJANGO_SETTINGS_MODULE=apps.config.settings.production \
+ENV DJANGO_SETTINGS_MODULE=apps.config.settings.build \
     ENVIRONMENT=production \
     SECRET_KEY=build-time-secret \
     DEBUG=False
