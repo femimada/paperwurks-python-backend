@@ -111,7 +111,17 @@ jobs:
           echo "   Backend: ${{ steps.images.outputs.backend-image }}"
           echo "  Worker: ${{ steps.images.outputs.worker-image }}"
 
-
+  debug-build:
+    name: Debug build output
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug Build Outputs
+        run: |
+          echo "Backend Image: ${{ needs.build.outputs.backend-image }}"
+          echo "Worker Image: ${{ needs.build.outputs.worker-image }}"
+          echo "All build outputs: ${{ toJSON(needs.build.outputs) }}"
+    
   deploy-backend:
     name: Deploy Backend Service
     needs: [setup, build]
@@ -124,13 +134,6 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/paperwurks-deploy-role
           aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Debug Build Outputs
-        run: |
-          echo "Backend Image: ${{ needs.build.outputs.backend-image }}"
-          echo "Worker Image: ${{ needs.build.outputs.worker-image }}"
-          echo "Environment: ${{ needs.setup.outputs.environment }}"
-          echo "All build outputs: ${{ toJSON(needs.build.outputs) }}"
 
       - name: Download Current Task Definition
         run: |
