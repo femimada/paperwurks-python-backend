@@ -70,8 +70,17 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ needs.setup.outputs.environment }}-${{ github.sha }}
         run: |
-          echo "backend-image=$ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG" >> $GITHUB_OUTPUT
-          echo "worker-image=$ECR_REGISTRY/paperwurks-worker:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          # 1. Define shell variables for clarity and safety
+          BACKEND_URI="$ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG"
+          WORKER_URI="$ECR_REGISTRY/paperwurks-worker:$IMAGE_TAG"
+
+          # 2. Write the outputs to the file (must not fail)
+          echo "backend-image=$BACKEND_URI" >> $GITHUB_OUTPUT
+          echo "worker-image=$WORKER_URI" >> $GITHUB_OUTPUT
+
+          # 3. Add debug printout for immediate visual confirmation
+          echo "--- Output File Content Check (Visual) ---"
+          cat $GITHUB_OUTPUT
           
       - name: Build and Push Backend Image
         uses: docker/build-push-action@v5
@@ -101,10 +110,7 @@ jobs:
           echo "Built images:"
           echo "   Backend: ${{ steps.images.outputs.backend-image }}"
           echo "  Worker: ${{ steps.images.outputs.worker-image }}"
-      
-      - name: Debug GITHUB_OUTPUT
-        run: |
-          cat $GITHUB_OUTPUT
+
 
   deploy-backend:
     name: Deploy Backend Service
