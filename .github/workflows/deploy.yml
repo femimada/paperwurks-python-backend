@@ -101,6 +101,7 @@ jobs:
           echo "Built images:"
           echo "   Backend: ${{ steps.images.outputs.backend-image }}"
           echo "  Worker: ${{ steps.images.outputs.worker-image }}"
+          cat $GITHUB_OUTPUT
 
   deploy-backend:
     name: Deploy Backend Service
