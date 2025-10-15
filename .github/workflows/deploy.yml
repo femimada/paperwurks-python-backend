@@ -44,8 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ needs.setup.outputs.environment }}
     outputs:
-      backend-image: ${{ steps.output-capture.outputs.backend-image }}
-      worker-image: ${{ steps.output-capture.outputs.worker-image }}
+      backend-image: ${{ steps.images.outputs.backend-image }}
+      worker-image: ${{ steps.images.outputs.worker-image }}
 
     steps:
       - name: Checkout
@@ -70,9 +70,9 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ needs.setup.outputs.environment }}-${{ github.sha }}
         run: |
-          echo "backend=$ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG" >> $GITHUB_OUTPUT
-          echo "worker=$ECR_REGISTRY/paperwurks-worker:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
+          echo "backend-image=$ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "worker-image=$ECR_REGISTRY/paperwurks-worker:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          
       - name: Build and Push Backend Image
         uses: docker/build-push-action@v5
         with:
@@ -98,8 +98,6 @@ jobs:
       - name: Capture Build Outputs
         id: output-capture
         run: |
-          echo "backend-image=${{ steps.images.outputs.backend }}" >> $GITHUB_OUTPUT
-          echo "worker-image=${{ steps.images.outputs.worker }}" >> $GITHUB_OUTPUT
           echo "Built images:"
           echo "  Backend: ${{ steps.images.outputs.backend }}"
           echo "  Worker: ${{ steps.images.outputs.worker }}"
