@@ -44,9 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ needs.setup.outputs.environment }}
     outputs:
-      backend-image: ${{ steps.images.outputs.backend-image }}
-      worker-image: ${{ steps.images.outputs.worker-image }}
-
+      image_tag: ${{ steps.images.outputs.image_tag }}
+      
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,16 +69,11 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ needs.setup.outputs.environment }}-${{ github.sha }}
         run: |
-          # 1. Define shell variables for clarity and safety
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
           BACKEND_URI="$ECR_REGISTRY/paperwurks-backend:$IMAGE_TAG"
           WORKER_URI="$ECR_REGISTRY/paperwurks-worker:$IMAGE_TAG"
-
-          # 2. Write the outputs to the file (must not fail)
           echo "backend-image=$BACKEND_URI" >> $GITHUB_OUTPUT
           echo "worker-image=$WORKER_URI" >> $GITHUB_OUTPUT
-
-          # 3. Add debug printout for immediate visual confirmation
-          echo "--- Output File Content Check (Visual) ---"
           cat $GITHUB_OUTPUT
           
       - name: Build and Push Backend Image
@@ -118,9 +112,8 @@ jobs:
     steps:
       - name: Debug Build Outputs
         run: |
-          echo "Backend Image: ${{ needs.build.outputs.backend-image }}"
-          echo "Worker Image: ${{ needs.build.outputs.worker-image }}"
-          echo "All build outputs: ${{ toJSON(needs.build.outputs) }}"
+          echo "image tag: ${{ needs.build.outputs.image_tag }}"
+
     
   deploy-backend:
     name: Deploy Backend Service
@@ -147,7 +140,7 @@ jobs:
         with:
           task-definition: task-definition.json
           container-name: paperwurks-backend
-          image: ${{ needs.build.outputs.backend-image }}
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/paperwurks-backend:${{ needs.build.outputs.image_tag }}
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
@@ -187,8 +180,8 @@ jobs:
         with:
           task-definition: task-definition.json
           container-name: paperwurks-worker
-          image: ${{ needs.build.outputs.worker-image }}
-
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/paperwurks-worker:${{ needs.build.outputs.image_tag }}
+          
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
