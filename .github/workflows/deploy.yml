@@ -111,13 +111,13 @@ jobs:
       matrix:
         service:
           - name: backend
-            task_definition: ${{ vars.ECS_TASK_DEFINITION_BACKEND }}
-            ecs_service: ${{ vars.ECS_SERVICE_BACKEND }}
+            env_task_key: ECS_TASK_DEFINITION_BACKEND
+            env_service_key: ECS_SERVICE_BACKEND
             container_name: paperwurks-backend
             image_name: paperwurks-backend
           - name: worker
-            task_definition: ${{ vars.ECS_TASK_DEFINITION_WORKER }}
-            ecs_service: ${{ vars.ECS_SERVICE_WORKER }}
+            env_task_key: ECS_TASK_DEFINITION_WORKER
+            env_service_key: ECS_SERVICE_WORKER
             container_name: paperwurks-worker
             image_name: paperwurks-worker
     steps:
@@ -130,11 +130,21 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        
+      - name: Resolve ECS Variables
+        id: resolve
+        run: |
+          TASK_DEF="${{ vars[matrix.service.env_task_key] }}"
+          ECS_SERVICE="${{ vars[matrix.service.env_service_key] }}"
+          echo "task_definition=$TASK_DEF" >> $GITHUB_OUTPUT
+          echo "ecs_service=$ECS_SERVICE" >> $GITHUB_OUTPUT
+          echo "Resolved ECS task definition: $TASK_DEF"
+          echo "Resolved ECS service: $ECS_SERVICE"
 
       - name: Download Current Task Definition
         run: |
           aws ecs describe-task-definition \
-            --task-definition ${{ matrix.service.task_definition }} \
+            --task-definition ${{ steps.resolve.outputs.task_definition }} \
             --region ${{ vars.AWS_REGION }} \
             --query taskDefinition > task-definition.json
 
@@ -150,7 +160,7 @@ jobs:
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
-          service: ${{ matrix.service.ecs_service }}
+          service: ${{ steps.resolve.outputs.ecs_service }}
           cluster: ${{ vars.ECS_CLUSTER }}
           wait-for-service-stability: true
 
