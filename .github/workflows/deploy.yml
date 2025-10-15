@@ -105,15 +105,6 @@ jobs:
           echo "   Backend: ${{ steps.images.outputs.backend-image }}"
           echo "  Worker: ${{ steps.images.outputs.worker-image }}"
 
-  debug-build:
-    name: Debug build output
-    needs: [build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Debug Build Outputs
-        run: |
-          echo "image tag: ${{ needs.build.outputs.image_tag }}"
-
     
   deploy-backend:
     name: Deploy Backend Service
@@ -132,6 +123,7 @@ jobs:
         run: |
           aws ecs describe-task-definition \
             --task-definition ${{ vars.ECS_TASK_DEFINITION_BACKEND }} \
+            --region ${{ vars.AWS_REGION }}
             --query taskDefinition > task-definition.json
 
       - name: Render New Task Definition
