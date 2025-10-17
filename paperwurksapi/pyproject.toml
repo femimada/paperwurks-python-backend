@@ -22,10 +22,6 @@ classifiers = [
 Homepage = "https://paperwurks.com"
 Repository = "https://github.com/paperwurks/backend"
 
-# =============================================================================
-# Tooling Configuration
-# =============================================================================
-
 [tool.black]
 line-length = 100
 target-version = ['py312']
@@ -80,16 +76,11 @@ module = "*.tests.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]
-# CORRECTED: Must point to the specific test settings module
 DJANGO_SETTINGS_MODULE = "apps.config.settings.test"
-
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
+pythonpath = ["."]
 testpaths = ["apps", "tests"]
-
-# Consolidated addopts from pytest.ini [cite: 4]
 addopts = "-v --tb=short --strict-markers --cov-report=term-missing --cov-report=html --cov-report=xml --reuse-db --nomigrations"
-
-# Additional options from pytest.ini [cite: 4]
 python_classes = "Test*"
 python_functions = "test_*"
 django_find_project = false
@@ -98,8 +89,6 @@ filterwarnings = [
     "ignore::PendingDeprecationWarning",
     "ignore::UserWarning",
 ]
-
-# Markers from pytest.ini [cite: 4]
 markers = [
     "slow: marks tests as slow (deselect with 'not slow')",
     "integration: marks tests as integration tests",
@@ -107,9 +96,8 @@ markers = [
     "smoke: marks tests as smoke tests for quick validation",
     "api: marks tests as API tests",
     "celery: marks tests that require Celery",
+    "asyncio: marks tests as async tests", 
 ]
-
-# Environment variables from pytest.ini [cite: 4]
 env = [
     "ENVIRONMENT=test",
     "DEBUG=False",
@@ -118,7 +106,7 @@ env = [
 ]
 
 [tool.coverage.run]
-# Consolidated source from pyproject.toml [cite: 1] and coveragerc [cite: 2]
+
 source = ["apps", "config", "core", "tasks"]
 omit = [
     "*/migrations/*",
@@ -136,7 +124,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Consolidated exclude_lines from pyproject.toml [cite: 1] and coveragerc [cite: 2]
+
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
@@ -154,7 +142,7 @@ show_missing = true
 directory = "htmlcov"
 
 [tool.flake8]
-# Consolidated from setup.cfg and external flake8 file [cite: 5]
+
 max-line-length = 100
 max-complexity = 10
 exclude = [
@@ -170,7 +158,7 @@ exclude = [
     "dist",
     "*.egg-info",
 ]
-# Unified ignore list [cite: 5]
+
 ignore = [
     "E203",  # whitespace before ':' (for black compatibility)
     "E226",  # missing whitespace around arithmetic operator
