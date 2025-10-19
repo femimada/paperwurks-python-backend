@@ -48,8 +48,6 @@ def identity_data(valid_email, valid_password):
     return {
         'email': valid_email,
         'password': valid_password,
-        'first_name': 'John',
-        'last_name': 'Doe',
     }
 
 
@@ -59,8 +57,6 @@ def entity_data():
     return {
         'name': f'Test Agency {uuid4().hex[:8]}',
         'entity_type': 'estate_agency',
-        'address': '123 Test Street, London',
-        'postcode': 'SW1A 1AA',
         'settings': {
             'notifications': {
                 'email_enabled': True,
@@ -69,6 +65,10 @@ def entity_data():
             'compliance': {
                 'require_solicitor_signoff': True
             }
+        },
+        'metadata': {
+            'address': '123 Test Street, London',
+            'postcode': 'SW1A 1AA',
         }
     }
 

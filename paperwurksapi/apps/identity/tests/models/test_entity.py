@@ -341,7 +341,5 @@ class TestEntityMultiTenancy:
         
         mock_entity.soft_delete()
         identity.refresh_from_db()
-        
-        # Identity should still exist and reference the soft-deleted entity
         assert identity.entity == mock_entity
         assert mock_entity.deleted_at is not None
