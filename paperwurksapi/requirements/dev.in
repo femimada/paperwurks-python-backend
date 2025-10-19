@@ -27,3 +27,9 @@ pip-tools>=7.0
 
 # Monitoring
 flower
+
+bcrypt
+pytest_asyncio>=1.2
+freezegun>=1.5
+pytest-cov>=7.0
+pytest-mock>=3.15

@@ -28,3 +28,5 @@ requests>=2.31
 
 # HTTP & WSGI Server (required for production/worker base image)
 gunicorn>=23.0
+
+httpx>=0.28
